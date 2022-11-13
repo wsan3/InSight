@@ -1,9 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
-import React from 'react';
+import React, {useState} from 'react';
 import { Button, Image, ActivityIndicator, StyleSheet, Text, View, ScrollView } from 'react-native';
 import * as Speech from 'expo-speech';
 
-const API_KEY = process.env.API_KEY;
+const API_KEY = 'AIzaSyANFdJu575f473Y4SA_8pmv9y4QLN7FgT0';
 const API_URL = `https://vision.googleapis.com/v1/images:annotate?key=${API_KEY}`;
 
 async function callGoogleVisionAsync(image) {
@@ -33,15 +33,18 @@ async function callGoogleVisionAsync(image) {
   });
   const result = await response.json();
 
-  // return result.responses[0].labelAnnotations[0].description;
-  return result.responses[0].textAnnotations[0].description;
+  if (result.responses[0].textAnnotations) {
+    return result.responses[0].textAnnotations[0].description;
+  } else {
+    return "Unable to detect text";
+  }
 }
 
 export default function App() {
-  const [image, setImage] = React.useState(null);
-  const [isSpeaking, setIsSpeaking] = React.useState(false);
-  const [description, setDescription] = React.useState(null);
-  const [permissions, setPermissions] = React.useState(false);
+  const [image, setImage] = useState(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [description, setDescription] = useState(null);
+  const [permissions, setPermissions] = useState(false);
 
   const speak = () => {
     setIsSpeaking(true);
