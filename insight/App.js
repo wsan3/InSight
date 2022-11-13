@@ -1,124 +1,173 @@
-import React, { useState, useEffect } from 'react';
-import { Flex, Button, Spacer, Container, Heading, Text, Center, NativeBaseProvider } from "native-base";
-import { Audio } from 'expo-av';
+import * as ImagePicker from 'expo-image-picker';
+import React from 'react';
+import { Button, Image, ActivityIndicator, StyleSheet, Text, View, ScrollView } from 'react-native';
+import * as Speech from 'expo-speech';
 
-const App = () => {
-  const [text, setText] = useState(true);
-  const [sound, setSound] = useState();
-  const [recording, setRecording] = useState();
-  const [recordedURI, setRecordedURI] = useState();
+const API_KEY = process.env.API_KEY;
+const API_URL = `https://vision.googleapis.com/v1/images:annotate?key=${API_KEY}`;
 
-  async function playSound() {
-    console.log('Loading Sound');
-    // const { sound } = await Audio.Sound.createAsync(require('./assets/Hello.mp3'));
-    const sound = new Audio.Sound()
+async function callGoogleVisionAsync(image) {
+  const body = {
+    requests: [
+      {
+        image: {
+          content: image,
+        },
+        features: [
+          {
+            type: 'DOCUMENT_TEXT_DETECTION',
+            maxResults: 1,
+          },
+        ],
+      },
+    ],
+  };
 
-    await sound.loadAsync({
-      uri: recordedURI
-    })
-    setSound(sound);
-    console.log('Playing Sound');
-    await sound.playAsync();
-  }
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json();
 
-  useEffect(() => {
-    return sound
-      ? () => {
-        console.log('Unloading Sound');
-        sound.unloadAsync();
-      }
-      : undefined;
-  }, [sound]);
+  // return result.responses[0].labelAnnotations[0].description;
+  return result.responses[0].textAnnotations[0].description;
+}
 
-  async function startRecording() {
-    try {
-      console.log('Requesting permissions..');
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
+export default function App() {
+  const [image, setImage] = React.useState(null);
+  const [isSpeaking, setIsSpeaking] = React.useState(false);
+  const [description, setDescription] = React.useState(null);
+  const [permissions, setPermissions] = React.useState(false);
 
-      console.log('Starting recording..');
-      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      setRecording(recording);
-      console.log('Recording started');
-    } catch (err) {
-      console.error('Failed to start recording', err);
+  const speak = () => {
+    setIsSpeaking(true);
+    Speech.speak(description);
+  };
+
+  const stopSpeak = () => {
+    setIsSpeaking(false);
+    Speech.stop();
+  };
+
+  const askPermissionsAsync = async () => {
+    let permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (permissionResult.granted === false) {
+      alert('Permission to access camera roll is required!');
+      return;
+    } else {
+      setPermissions(true);
     }
-  }
+  };
 
-  async function stopRecording() {
-    console.log('Stopping recording..');
-    setRecording(undefined);
-    await recording.stopAndUnloadAsync();
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
+  const takePictureAsync = async () => {
+    const { cancelled, uri, base64 } = await ImagePicker.launchCameraAsync({
+      base64: true,
     });
-    const uri = recording.getURI();
-    setRecordedURI(uri);
-    console.log('Recording stopped and stored at', uri);
-  }
 
+    if (!cancelled) {
+      setImage(uri);
+      setDescription('Loading...');
+      try {
+        const result = await callGoogleVisionAsync(base64);
+        setDescription(result);
+      } catch (error) {
+        setDescription(`Error: ${error.message}`);
+      }
+    }
+  };
 
   return (
-    <Container>
-      <Heading>
-        A component library for the
-        <Text color="emerald.500"> React Ecosystem</Text>
-      </Heading>
-      <Text mt="3" fontWeight="medium">
-        {text}
-      </Text>
+    <View style={{ flex: 1 }}>
+      {permissions === false ? (
+        <View style={{
+          flex: 1, alignItems: 'center',
+          justifyContent: 'center', width: '100%'
+        }} >
+          <Button onPress={askPermissionsAsync} title="Ask permissions" />
+        </View>
+      ) : (
 
-      <Flex h={40} alignItems="center">
-        <Button size={16} bg="primary.500" _dark={{
-          bg: "primary.400"
-        }} rounded="sm" _text={{
-          color: "warmGray.50",
-          fontWeight: "medium"
-        }}
-          onPress={recording ? stopRecording : startRecording}
-        // onPress={() => { setText("blue") }}
-        >
-          {recording ? 'Stop Recording' : 'Start Recording'}
-        </Button>
+        <View style={[styles.container, {
+          // Try setting `flexDirection` to `"row"`.
+          flexDirection: "column"
+        }]}>
+          <>
+            <View style={{
+              flex: 1, alignItems: 'center',
+              justifyContent: 'center', width: '100%', backgroundColor: "white"
+            }} >
+              <Text onPress={takePictureAsync} style={{ fontSize: 40, backgroundColor: "white", color: "#2596be" }}>
+                InSight
+              </Text>
+            </View>
 
-        <Spacer />
+            <View style={{
+              flex: 2, alignItems: 'center',
+              justifyContent: 'center', width: '100%', backgroundColor: "#f0f7ff"
+            }} >
+              {image ?
+                <Image style={styles.image} source={{ uri: image }} />
+                :
+                null
+              }
+            </View>
 
-        <Button size={16} bg="secondary.500" _dark={{
-          bg: "secondary.400"
-        }} rounded="sm" _text={{
-          color: "warmGray.50",
-          fontWeight: "medium"
-        }}
-          onPress={() => { setText("pink"); playSound() }}
-        >
-          Play Sound
-        </Button>
+            <View style={{ flex: 4, width: '100%', backgroundColor: "#d4e9ff" }} >
+              {description === 'Loading...' ?
+                <ActivityIndicator style={{ flex: 1 }} color="white" size="large" />
+                :
+                <ScrollView style={{ flex: 1, margin: 20, backgroundColor: "#d4e9ff" }}>
+                  {description && <Text style={styles.text}>{description}</Text>}
+                </ScrollView >
+              }
 
-        {/* <Button
-          size={16} bg="secondary.500" _dark={{
-            bg: "secondary.400"
-          }} rounded="sm" _text={{
-            color: "warmGray.50",
-            fontWeight: "medium"
-          }}
-        >
-          {recording ? 'Stop Recording' : 'Start Recording'}
-        </Button> */}
-      </Flex>
-    </Container>
-  )
-};
+            </View>
+            <View style={{
+              flex: 1, flexDirection: 'row', width: '100%', backgroundColor: "green"
+            }}>
+              <View style={{
+                flex: 1, backgroundColor: "white", alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Button style={{ flex: 1 }} onPress={takePictureAsync} title="Take a Picture" />
+              </View>
+              <View style={{
+                flex: 1, backgroundColor: "white", alignItems: 'center',
+                justifyContent: 'center'
+              }}>
 
-export default () => {
-  return (
-    <NativeBaseProvider>
-      <Center flex={1} px="3">
-        <App />
-      </Center>
-    </NativeBaseProvider>
+                {!isSpeaking ?
+                  <Button style={{ flex: 1 }} onPress={speak} title="Start Speech" />
+                  :
+                  <Button style={{ flex: 1 }} onPress={stopSpeak} title="Stop Speech" />
+                }
+              </View>
+            </View>
+          </>
+        </View >
+      )
+      }
+    </View >
   );
-};
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  image: {
+    width: 200,
+    height: 200,
+  },
+  text: {
+    margin: 5,
+    fontSize: 40
+  },
+});

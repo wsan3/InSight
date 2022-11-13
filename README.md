@@ -1,3 +1,2 @@
 # InSight
-# InSight
-# InSight
+Mobile app for people with visual impairment
